@@ -1,0 +1,106 @@
+# Copy to config.yaml and fill in. Every default here is free: no paid API or subscription is needed. Keys can also come from env vars:
+# YOUTUBE_API_KEY, GEMINI_API_KEY, FB_PAGE_ID, FB_PAGE_TOKEN
+
+output_dir: output
+timezone: Asia/Dhaka
+
+youtube:
+  api_key: YOUR_YOUTUBE_DATA_API_KEY      # console.cloud.google.com -> enable YouTube Data API v3 -> API key
+  region: null           # e.g. BD, US, IN to bias search; null = global
+  language: null         # e.g. en, bn
+  lookback_days: 90
+  search_pages: 1        # each page = 50 results = 100 quota units
+  baseline_channels: 40  # channels whose recent uploads set the "normal" for outlier scores
+  baseline_uploads: 30
+  comment_videos: 15
+  comments_per_video: 100
+  cache_hours: 12        # repeated scans within this window cost 0 quota
+  # uploading
+  oauth_client_secret: secrets/client_secret.json
+  oauth_token: secrets/youtube_token.json
+  privacy: private       # private | unlisted | public
+  category_id: 23        # 23 Comedy, 24 Entertainment, 22 People & Blogs, 27 Education
+  upload_language: en
+
+facebook:
+  enabled: false         # true = `upload` also posts to your Page by default
+  page_id: YOUR_PAGE_ID
+  page_token: YOUR_LONG_LIVED_PAGE_TOKEN   # free; needs read_insights, pages_read_engagement, pages_manage_engagement, pages_manage_posts, publish_video
+  graph_version: v23.0   # bump if Meta deprecates it
+  max_items: 200         # how many of your Reels/videos fb-mine reads
+  watch_pages: []        # competitor Page usernames or IDs for fb-watch (needs Page Public Content Access)
+  watch_posts: 100
+
+llm:
+  provider: ollama       # ollama | gemini | none (none = write ideas with the /niche-ideas Claude skill)
+  ollama_url: http://localhost:11434
+  ollama_model: qwen3:14b   # fits 16 GB VRAM; gemma3:12b also good
+  num_ctx: 16384
+  gemini_api_key: YOUR_GEMINI_API_KEY   # optional; free tier at aistudio.google.com. Ollama needs nothing
+  gemini_model: gemini-2.5-flash        # change to the current Flash model name if this 404s
+
+ideas:
+  count: 6
+  language: English      # default; `--market de` switches language and voice automatically
+
+channel:
+  bible: channel/bible.md            # your original character/world. Fill it in; it's what makes videos yours
+  character_image: channel/character.png   # used by image-to-video workflows ({{IMAGE}} placeholder)
+  history: channel/history.jsonl     # every uploaded idea, used by the originality check
+  max_similarity: 0.5                # block ideas this close to your past videos or each other
+
+money:
+  default_markets: [us, uk, au, de, nordics, jp, fr, bd]
+  # Override any RPM range once you have your own Studio data: [long_low, long_high, shorts_low, shorts_high]
+  # rpm:
+  #   entertainment_comedy: [2.5, 4.0, 0.04, 0.08]
+  # Override audience multipliers (share of US ad rates):
+  # geo_multiplier:
+  #   de: 0.9
+  # Add a market:
+  # markets:
+  #   nl: {region: NL, lang: nl, voice: nl-NL-MaartenNeural, language: Dutch}
+
+planner:                 # replace with your channel's real numbers from YouTube Studio when you have them
+  retention: 0.35
+  subs_per_1k_short: 0.5
+  subs_per_1k_long: 4.0
+  monthly_improvement: 0.04
+  months: 18
+
+upload:
+  max_per_day: 0           # 0 = no limit. Your call; set e.g. 3 if you want a safety brake
+  require_approval: false  # true = `upload` only posts videos you've marked with `niche approve`
+
+tts:
+  engine: edge           # edge (free, online) | piper (offline) | none
+                         # Best: record your own voice -> audio/my_vo_01.m4a per scene (used automatically)
+  voice: en-US-AndrewMultilingualNeural   # Bangla: bn-BD-NabanitaNeural / bn-BD-PradeepNeural
+  rate: "+8%"
+  pitch: "+0Hz"
+  piper_model: null      # path to a piper .onnx voice if engine: piper
+
+video:
+  comfy_url: http://127.0.0.1:8188
+  comfy_workflow: workflows/t2v_api.json
+  model_fps: 24          # Wan 2.2 5B = 24, Wan 14B = 16, LTX-Video = 24/25
+  max_frames: 121        # 121 @ 24fps = 5 s per shot
+  render_size_short: [704, 1280]   # Wan 2.2 5B native; LTX-Video: [512, 768]
+  render_size_long: [1280, 704]
+  same_seed_per_video: true
+  style_suffix: "cinematic lighting, vivid colors, sharp focus, 4k"
+  negative_prompt: "blurry, distorted, extra limbs, watermark, text, low quality, static"
+  veo_hero_shots_per_video: 2      # scenes listed in flow_prompts.md for Google Flow; 0 = GPU only, no Flow step
+  keep_clip_audio: true            # keep Veo's native audio under the voiceover
+  fallback_placeholder: true       # placeholder cards when a shot is missing (good for testing)
+  short_size: [1080, 1920]
+  long_size: [1920, 1080]
+  fps: 30
+  captions: true
+  caption_words: 3
+  caption_uppercase: true
+  caption_font: Arial              # Bangla captions: "Noto Sans Bengali" (install the font)
+  font_file: null                  # .ttf for thumbnails/placeholders, e.g. C:/Windows/Fonts/arialbd.ttf
+  music_dir: music                 # drop royalty-free tracks here; one is picked per video
+  music_volume: 0.12
+  x264_preset: veryfast
