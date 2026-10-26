@@ -18,11 +18,38 @@ from niche_studio.config import ROOT, load_config, niche_dir
 
 st.set_page_config(page_title="Niche Studio", page_icon="🎬", layout="wide")
 st.markdown("""<style>
-.block-container{padding-top:1.6rem;max-width:1250px}
-div[data-testid="stMetricValue"]{font-size:1.45rem}
-.v{padding:.55rem .8rem;border-radius:8px;margin:.3rem 0;border-left:4px solid;background:rgba(127,127,127,.07)}
-.v.pass{border-color:#2e9e5b}.v.warn{border-color:#d49a12}.v.fail{border-color:#d2453b}
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
+html, body, [class*="css"], .stMarkdown, button, input, textarea, select {font-family:'Inter',sans-serif !important}
+.block-container{padding-top:2rem;max-width:1150px}
+h1{font-weight:800 !important;letter-spacing:-.02em}
+h2,h3{font-weight:700 !important;letter-spacing:-.01em}
+section[data-testid="stSidebar"]{background:#140f1f}
+section[data-testid="stSidebar"] a[data-testid="stSidebarNavLink"]{border-radius:10px;padding:.45rem .7rem;margin:2px 0}
+section[data-testid="stSidebar"] a[aria-current="page"]{background:rgba(167,107,255,.18)}
+div[data-testid="stVerticalBlockBorderWrapper"]{background:#1a1526;border-color:#2a2238 !important}
+div[data-testid="stMetric"]{background:#1a1526;border:1px solid #2a2238;border-radius:14px;padding:.8rem 1rem}
+div[data-testid="stMetricValue"]{font-size:1.45rem;font-weight:700}
+.stButton>button, .stFormSubmitButton>button{border-radius:10px;font-weight:600;padding:.5rem 1.1rem}
+.stButton>button[kind="primary"]{background:linear-gradient(135deg,#8b4dff,#c06bff);border:0}
+.stButton>button[kind="primary"]:hover{filter:brightness(1.1)}
+.v{padding:.6rem .9rem;border-radius:10px;margin:.35rem 0;border-left:4px solid;background:#1a1526}
+.v.pass{border-color:#34c27a}.v.warn{border-color:#e8b130}.v.fail{border-color:#ef5a50}
 .small{font-size:.85rem;opacity:.75}
+.hero{padding:2rem 2.2rem;border-radius:20px;margin-bottom:1.4rem;
+  background:radial-gradient(circle at 85% 20%,rgba(192,107,255,.35),transparent 55%),linear-gradient(135deg,#231a36,#140f1f);
+  border:1px solid #2f2545}
+.hero h1{margin:0 0 .4rem 0;font-size:2.3rem}
+.hero p{margin:0;opacity:.8;font-size:1.05rem}
+.step{display:flex;gap:1rem;align-items:flex-start;padding:1rem 1.2rem;border-radius:14px;background:#1a1526;border:1px solid #2a2238;margin-bottom:.7rem}
+.step .n{flex:none;width:34px;height:34px;border-radius:50%;display:grid;place-items:center;font-weight:700;background:#2a2040;color:#c9a4ff}
+.step.done .n{background:#1f3b2c;color:#5fe39b}
+.step.now{border-color:#8b4dff;box-shadow:0 0 0 1px #8b4dff55}
+.step b{display:block;margin-bottom:.15rem}
+.step span{opacity:.72;font-size:.92rem}
+.badge{display:inline-block;padding:.12rem .55rem;border-radius:999px;background:#2a2040;color:#d3b5ff;font-size:.78rem;font-weight:600}
+table.mt{width:100%;font-size:.82rem;border-collapse:collapse;margin:.3rem 0}
+table.mt td{padding:.18rem .2rem;border-bottom:1px solid #2a2238}
+table.mt td:last-child{text-align:right;opacity:.7;width:1.2rem}
 </style>""", unsafe_allow_html=True)
 
 
@@ -129,13 +156,7 @@ def ns(**kw):
 
 
 # ---------------------------------------------------------------- pages
-def page_home():
-    st.title("🎬 Niche Studio")
-    st.caption("Find niches that pay, in the market that pays most, then make and publish videos. Everything runs on your PC for free.")
-    c = cfg()
-    if not c:
-        st.warning("No config yet. Open **Settings** and save once to create it.")
-        return
+def _home_checks(c):
     yk = str(c.get("youtube", {}).get("api_key", ""))
     fb = str(c.get("facebook", {}).get("page_token", ""))
     lc = c.get("llm", {})
@@ -157,27 +178,572 @@ def page_home():
             if not ok:
                 st.caption(hint)
 
-    st.subheader("How to use it")
-    st.markdown("""
-1. **Find a niche**: type a niche, compare countries or several niches.
-2. **Niche report**: what new channels get, proven formats, money, the verdict.
-3. **Money plan**: when you'd hit monetization and what it pays.
-4. **Ideas**: video plans built on the proven formats.
-5. **Studio**: render, add Flow clips or your own voice, watch, upload.
-6. **Facebook**: your Page's stats, competitors, or Reels you log by hand.
-""")
-    opts = scanned(c)
-    if opts:
-        st.subheader("Your niches")
-        rows = []
-        for label, d in opts.items():
-            a = load(d / "analysis.json")
-            lv = [v["level"] for v in a.get("verdict", [])]
-            rows.append({"Niche": label, "Scanned": a["scanned_at"][:16].replace("T", " "),
-                         "✅": lv.count("pass"), "⚠️": lv.count("warn"), "❌": lv.count("fail"),
-                         "Proven formats": len(a.get("proven_formats", [])),
-                         "Ideas": len((load(d / "ideas.json") or {}).get("ideas", []))})
-        st.dataframe(pd.DataFrame(rows), hide_index=True, width="stretch")
+
+
+FLOW_URL = "https://labs.google/fx/tools/flow"
+GEMINI_URL = "https://gemini.google.com/app"
+VIBES = ["Kids rhyme / song", "Funny", "Cute", "Satisfying", "Dramatic", "Mysterious", "Educational", "Wholesome"]
+REGIONS = {"United States": "US", "United Kingdom": "GB", "India": "IN", "Bangladesh": "BD", "Germany": "DE",
+           "Canada": "CA", "Australia": "AU", "Japan": "JP", "France": "FR", "Brazil": "BR", "Worldwide (search only)": None}
+BASIS = {"verified": ("✔", "verified from the platform's API"), "derived": ("ƒ", "calculated from verified numbers"),
+         "measured": ("⏱", "measured between two of our own checks"), "entered": ("✎", "entered by you"),
+         "inferred": ("≈", "AI reading, not data"), "unavailable": ("–", "not published by the platform")}
+
+
+def copy_button(text: str, label: str = "Copy", key: str = "c"):
+    """A real copy-to-clipboard button (st.code's icon is easy to miss)."""
+    import html as _h
+    import streamlit.components.v1 as components
+    components.html(f"""
+<textarea id="t" style="position:absolute;left:-9999px">{_h.escape(text)}</textarea>
+<button id="b" style="width:100%;padding:.62rem 1rem;border:0;border-radius:10px;cursor:pointer;font:600 15px Inter,sans-serif;
+ color:#fff;background:linear-gradient(135deg,#8b4dff,#c06bff)">📋 {_h.escape(label)}</button>
+<script>
+const b=document.getElementById('b'), t=document.getElementById('t');
+b.onclick=async()=>{{ try{{await navigator.clipboard.writeText(t.value);}}catch(e){{t.select();document.execCommand('copy');}}
+ b.textContent='✅ Copied! Now paste it into Google'; setTimeout(()=>b.textContent='📋 {_h.escape(label)}',2500);}};
+</script>""", height=50)
+
+
+def _fmt_n(x, pct=False, dec=0):
+    if x is None:
+        return None
+    return f"{x:,.{dec}f}%" if pct else (f"{x:,.{dec}f}" if dec else f"{x:,.0f}")
+
+
+def _metric_rows(v: dict) -> list[tuple[str, str | None, str]]:
+    src = "entered" if v.get("entered") else "verified"
+    grow = v.get("growth_per_hour")
+    return [("Views", _fmt_n(v.get("views")), src),
+            ("Likes" if v["platform"] == "YouTube" else "Reactions", _fmt_n(v.get("likes")), src),
+            ("Comments", _fmt_n(v.get("comments")), src),
+            ("Shares", _fmt_n(v.get("shares")), src if v.get("shares") is not None else "unavailable"),
+            ("Views / hour (avg since upload)", _fmt_n(v.get("views_per_hour")), "derived"),
+            ("Growth now", f"{grow:,.0f} views/h over {v.get('growth_window_h')}h" if grow is not None else None,
+             "measured" if grow is not None else "unavailable"),
+            ("Engagement", _fmt_n(v.get("engagement_rate"), pct=True, dec=2), "derived"),
+            ("Views ÷ subscribers", f"{v['views_vs_subs']}×" if v.get("views_vs_subs") is not None else None,
+             "derived" if v.get("views_vs_subs") is not None else "unavailable"),
+            ("Views vs similar results", f"{v['views_vs_median']}× median" if v.get("views_vs_median") else None, "derived"),
+            ("Retention / watch time", None, "unavailable")]
+
+
+def video_card(v: dict, key: str, compact: bool = False, actions: bool = True):
+    with st.container(border=True):
+        if v.get("thumbnail"):
+            st.image(v["thumbnail"], width="stretch")
+        age_d = v.get("age_hours", 0) / 24
+        st.markdown(f"**[{v.get('title', '')[:90]}]({v.get('url') or '#'})**  \n"
+                    f"<span class='small'>{v['platform']} · {v.get('channel_title') or ''} · "
+                    f"{str(v.get('published_at', ''))[:10]} ({age_d:.1f} days ago) · "
+                    f"{'Short/Reel' if v.get('is_short') else 'Long'} · {v.get('duration_s', 0) // 60}:{v.get('duration_s', 0) % 60:02d}</span>",
+                    unsafe_allow_html=True)
+        st.markdown(f"<span class='badge'>{v.get('status', '')}</span> <span class='small'>{v.get('status_reason', '')}</span>",
+                    unsafe_allow_html=True)
+        rows = _metric_rows(v)[: 4 if compact else None]
+        st.markdown("<table class='mt'>" + "".join(
+            f"<tr><td>{n}</td><td><b>{val if val is not None else 'Data unavailable'}</b></td>"
+            f"<td title='{BASIS[b][1]}'>{BASIS[b][0]}</td></tr>" for n, val, b in rows) + "</table>", unsafe_allow_html=True)
+        if v.get("viral_potential") is not None:
+            st.caption(f"Viral potential: **{v['viral_potential']}/100** (formula under the tabs)")
+        hk = st.session_state.get("tr_hooks", {}).get(v["video_id"])
+        if hk:
+            st.caption(f"Hook ≈ {hk.get('hook_score')}/10 · {hk.get('hook_structure', '')} · {hk.get('why', '')}")
+        if actions:
+            st.checkbox("Compare", key=f"cmp_{key}_{v['video_id']}",
+                        value=v["video_id"] in st.session_state.get("tr_cmp", set()),
+                        on_change=_toggle_cmp, args=(v["video_id"], f"cmp_{key}_{v['video_id']}"))
+            if st.button("Select this video and generate prompt", key=f"sel_{key}_{v['video_id']}", type="primary", width="stretch"):
+                st.session_state["sel_video"] = v
+                st.session_state.pop("sel_analysis", None)
+                st.session_state["cr_src"] = "A trending video"
+                st.switch_page(PAGE_CREATE)
+
+
+def _toggle_cmp(vid, k):
+    s = st.session_state.setdefault("tr_cmp", set())
+    (s.add if st.session_state.get(k) else s.discard)(vid)
+
+
+# ---------------------------------------------------------------- home
+def page_home():
+    st.markdown("<div class='hero'><h1>Niche Studio</h1><p>Find what's working. Turn it into a ready-to-paste "
+                "Google Veo prompt. Make the video.</p></div>", unsafe_allow_html=True)
+    a, b = st.columns(2, gap="large")
+    with a.container(border=True):
+        st.markdown("### 🔥 Discover trending videos")
+        st.markdown("Search YouTube (and Facebook Reels you've seen) by topic, format and date. See real views, "
+                    "growth and engagement, pick a winner, and get a prompt built from it.")
+        if st.button("Discover trending videos  →", type="primary", width="stretch"):
+            st.switch_page(PAGE_DISCOVER)
+    with b.container(border=True):
+        st.markdown("### ✨ Create a video from my idea")
+        st.markdown("Type your idea. Optionally check what's working for that topic first. Get the complete "
+                    "prompt, clip by clip, ready for Google AI Pro.")
+        if st.button("Create from my idea  →", type="primary", width="stretch"):
+            st.session_state["cr_src"] = "My idea"
+            st.switch_page(PAGE_CREATE)
+    c = cfg()
+    yk = str((c or {}).get("youtube", {}).get("api_key", ""))
+    if not yk or yk.startswith("YOUR_"):
+        st.warning("Add your free YouTube API key in **Settings** to use trending research.")
+
+
+# ---------------------------------------------------------------- discover
+def page_discover():
+    from datetime import timedelta, timezone
+    from niche_studio.trending import CONTENT_TYPES, YT_CATEGORIES, fb_as_videos, fb_entries, fb_save, rate_hooks, search_youtube
+    st.title("Discover trending videos")
+    c = cfg()
+    if not c:
+        st.warning("Save Settings first.")
+        return
+    ss = st.session_state
+    with st.container(border=True):
+        f1, f2 = st.columns(2)
+        plats = f1.pills("Platform", ["YouTube", "Facebook"], selection_mode="multi", default=["YouTube"]) or ["YouTube"]
+        fmt = f2.segmented_control("Format", ["Any", "Shorts / Reels", "Long videos"], default="Any") or "Any"
+        topic = st.text_input("Topic or keywords", placeholder="e.g. nursery rhymes, baby shark, colors song, asteroid. Empty = YouTube's Trending chart (it never includes kids videos)")
+        ctype = st.pills("Content type (optional)", list(CONTENT_TYPES))
+        d1, d2, d3 = st.columns([2, 1, 1])
+        when = d1.segmented_control("Uploaded in the last", ["24 hours", "7 days", "30 days", "Custom"], default="7 days") or "7 days"
+        region = REGIONS[d2.selectbox("Country", list(REGIONS))]
+        cat = YT_CATEGORIES[d3.selectbox("YouTube category", list(YT_CATEGORIES))]
+        now = datetime.now(timezone.utc)
+        after, before = now - timedelta(days={"24 hours": 1, "7 days": 7, "30 days": 30}.get(when, 30)), None
+        if when == "Custom":
+            rng = st.date_input("Date range", (now.date() - timedelta(days=30), now.date()))
+            if isinstance(rng, tuple) and len(rng) == 2:
+                after = datetime.combine(rng[0], dtime.min, timezone.utc)
+                before = datetime.combine(rng[1], dtime.max, timezone.utc)
+        with st.expander("More filters"):
+            m1, m2, m3 = st.columns(3)
+            min_views = m1.number_input("Minimum views", 0, 10**9, 0, step=10000)
+            min_eng = m2.number_input("Minimum engagement %", 0.0, 100.0, 0.0, step=0.5)
+            depth = m3.segmented_control("How many results", ["50", "100", "150"], default="50") or "50"
+            st.caption("Each YouTube search costs 100 quota units per 50 results (10,000 free per day). "
+                       "The Trending chart costs 1. Repeat searches within 12 hours are free (cached).")
+        query = " ".join(x for x in [topic.strip(), CONTENT_TYPES.get(ctype, "") if ctype else ""] if x)
+        go = st.button("🔍  Find trending videos", type="primary", width="stretch")
+
+    if "Facebook" in plats:
+        with st.expander(f"Facebook Reels you've seen ({len(fb_entries(c))} added)"):
+            st.caption("Meta doesn't give anyone view counts for other people's Pages, so no tool can search Facebook "
+                       "trends honestly. Add Reels you see while scrolling; they're ranked here with the same rules. "
+                       "Leave a number empty if you can't see it: it stays 'Data unavailable'.")
+            with st.form("fb_add", clear_on_submit=True):
+                a1, a2, a3 = st.columns(3)
+                url = a1.text_input("Reel link")
+                page = a2.text_input("Page name")
+                fol = a3.number_input("Page followers", 0, 10**10, 0)
+                b1, b2, b3, b4 = st.columns(4)
+                views = b1.number_input("Views", 0, 10**11, 0)
+                reac = b2.number_input("Reactions", 0, 10**10, 0)
+                com = b3.number_input("Comments", 0, 10**10, 0)
+                sh = b4.number_input("Shares", 0, 10**10, 0)
+                c1_, c2_, c3_ = st.columns(3)
+                posted = c1_.date_input("Posted on", datetime.now().date())
+                length = c2_.number_input("Length (seconds)", 0, 36000, 30)
+                cap = c3_.text_input("Caption / what it shows")
+                if st.form_submit_button("Add Reel") and url:
+                    rows = fb_entries(c)
+                    rows.append({"url": url, "page": page, "page_followers": fol or None, "views": views or None,
+                                 "reactions": reac or None, "comments": com or None, "shares": sh or None,
+                                 "posted": datetime.combine(posted, dtime(12), timezone.utc).isoformat(),
+                                 "length_s": length, "caption": cap})
+                    fb_save(c, rows)
+                    st.rerun()
+
+    if go:
+        vids, units = [], 0
+        if "YouTube" in plats:
+            pages = int(depth) // 50
+            fm = {"Any": "any", "Shorts / Reels": "shorts", "Long videos": "long"}[fmt]
+            out = run("Searching YouTube" if query else "Reading YouTube's Trending chart", search_youtube, c, query, fm,
+                      after if query else None, before, region, cat, pages, not query)
+            if out:
+                vids, units = out
+                if not query and when != "Custom":
+                    vids = [v for v in vids if v["age_hours"] <= (now - after).total_seconds() / 3600] or vids
+        if "Facebook" in plats:
+            fb = [v for v in fb_as_videos(c, query) if after <= datetime.fromisoformat(v["published_at"]) and
+                  (before is None or datetime.fromisoformat(v["published_at"]) <= before)]
+            if fmt != "Any":
+                fb = [v for v in fb if v["is_short"] == (fmt == "Shorts / Reels")]
+            vids += fb
+        vids = [v for v in vids if (v.get("views") or 0) >= min_views and (v.get("engagement_rate") or 0) >= min_eng]
+        ss["tr_results"], ss["tr_units"], ss["tr_query"] = vids, units, query or "YouTube Trending chart"
+        ss["tr_hooks"] = {}
+
+    vids = ss.get("tr_results")
+    if vids is None:
+        return
+    if not vids:
+        st.info("Nothing matched. Try a wider date range, fewer filters, or another keyword.")
+        return
+    st.markdown(f"**{len(vids)} videos** for *{ss['tr_query']}* · YouTube quota used: {ss.get('tr_units', 0)} units  \n"
+                + " · ".join(f"{m} {t}" for m, t in BASIS.values()), unsafe_allow_html=True)
+
+    cmp = [v for v in vids if v["video_id"] in ss.get("tr_cmp", set())]
+    if len(cmp) >= 2:
+        with st.container(border=True):
+            st.markdown(f"**Comparing {len(cmp)} videos**")
+            st.dataframe(pd.DataFrame([{"Title": v["title"][:50], "Platform": v["platform"], "Views": v.get("views"),
+                                        "Views/h": v.get("views_per_hour"), "Engagement %": v.get("engagement_rate"),
+                                        "Views÷subs": v.get("views_vs_subs"), "Shares": v.get("shares"),
+                                        "Age (days)": round(v["age_hours"] / 24, 1), "Status": v.get("status"),
+                                        "Viral potential": v.get("viral_potential")} for v in cmp]),
+                         hide_index=True, width="stretch")
+            if st.button("Clear comparison"):
+                ss["tr_cmp"] = set()
+                st.rerun()
+
+    def by(key, rows=None):
+        rows = rows if rows is not None else vids
+        return sorted([v for v in rows if v.get(key) is not None], key=lambda v: -v[key])
+
+    trending = sorted([v for v in vids if v.get("status") in ("Currently trending", "Rapidly growing", "Emerging")],
+                      key=lambda v: -(v.get("views_per_hour") or 0))
+    measured = by("growth_per_hour")
+    tabs = {
+        "Most viewed": (by("views"), "Total views (verified)."),
+        "Currently trending": (trending, "On YouTube's Trending chart, or ≤7 days old with top-quarter views/hour, or "
+                               "measured growth well above its average. Sorted by views per hour."),
+        "Fastest growing": (measured or by("views_per_hour"),
+                            "Measured views/hour between two of your searches." if measured else
+                            "Average views per hour since upload (views ÷ hours online). Search again in a few hours "
+                            "and this switches to real measured growth."),
+        "Highest engagement": (by("engagement_rate", [v for v in vids if (v.get("views") or 0) >= 1000]),
+                               "(likes + comments + shares where known) ÷ views. Videos under 1,000 views are left out."),
+        "Most shared": (by("shares"), "Verified share counts only. YouTube doesn't publish shares; Facebook Reels you add do."),
+        "Beats its channel": (by("views_vs_subs"), "Views ÷ subscribers. Above 1× means it reached far beyond its own audience."),
+        "Best hooks": (sorted([v for v in vids if v["video_id"] in ss.get("tr_hooks", {})],
+                              key=lambda v: -(ss["tr_hooks"][v["video_id"]].get("hook_score") or 0)),
+                       "AI reading of each video's title and first 15 seconds of transcript (≈ inferred, not data)."),
+        "Highest viral potential": (by("viral_potential"),
+                                    "Score = 50% views/hour rank + 30% views÷subscribers rank (or vs similar results) + "
+                                    "20% engagement rank, each as a percentile within these results."),
+    }
+    for tab, (name, (rows, how)) in zip(st.tabs(list(tabs)), tabs.items()):
+        with tab:
+            st.caption(how)
+            if name == "Best hooks":
+                if st.button("Analyse hooks of the top 10 by views (takes a minute)"):
+                    got = run("Reading openings", rate_hooks, c, by("views")[:10])
+                    if got:
+                        ss["tr_hooks"] = got
+                        st.rerun()
+            if not rows:
+                st.info({"Most shared": "No verified share counts in these results. YouTube doesn't publish shares.",
+                         "Currently trending": "None of these is both recent (≤7 days) and in the top quarter for views/hour. "
+                                               "Try 'Uploaded in the last 7 days' or '24 hours'.",
+                         "Best hooks": "Press the button above to analyse the openings."}.get(name, "No data for this ranking yet."))
+                continue
+            cols = st.columns(3)
+            for i, v in enumerate(rows[:12]):
+                with cols[i % 3]:
+                    video_card(v, key=name)
+
+
+# ---------------------------------------------------------------- create
+def _plans_dir(c) -> Path:
+    d = c["_output"] / "create" / "plans"
+    d.mkdir(parents=True, exist_ok=True)
+    return d
+
+
+def _gallery_dir(c) -> Path:
+    d = c["_output"] / "create"
+    d.mkdir(parents=True, exist_ok=True)
+    return d
+
+
+def page_create():
+    from niche_studio.llm import chat_json
+    from niche_studio.money import markets
+    from niche_studio.prompts import STYLES, VOICES, write_plan
+    from niche_studio.trending import analyze_video, research_idea, video_evidence
+    st.markdown("<div class='hero'><h1>Create</h1><p>Idea or trending video → analysis → a complete prompt you paste "
+                "into Google AI Pro.</p></div>", unsafe_allow_html=True)
+    c = cfg()
+    if not c:
+        st.warning("Save Settings first.")
+        return
+    ss = st.session_state
+    if "cr_idea_next" in ss:
+        ss["cr_idea"] = ss.pop("cr_idea_next")
+    src = st.segmented_control("Start from", ["My idea", "A trending video"],
+                               default=ss.get("cr_src", "My idea")) or "My idea"
+    ss["cr_src"] = src
+    context, base, default_aspect = None, "", "9:16"
+
+    if src == "A trending video":
+        v = ss.get("sel_video")
+        if not v:
+            st.info("No video selected yet.")
+            if st.button("Find a trending video  →", type="primary"):
+                st.switch_page(PAGE_DISCOVER)
+            return
+        left, right = st.columns([1, 2], gap="large")
+        with left:
+            video_card(v, key="sel", actions=False)
+        with right:
+            st.subheader("1 · Analyse the video")
+            st.caption("Reads its transcript, description and top comments. The video itself can't be watched by the "
+                       "app, so visual points are marked ≈ inferred.")
+            if st.button("🔎  Analyse this video", type="primary", disabled="sel_analysis" in ss):
+                ev = run("Reading transcript and comments", video_evidence, c, v)
+                if ev:
+                    an = run("Analysing", analyze_video, c, v, ev)
+                    if an:
+                        ss["sel_analysis"] = {"evidence_sources": ev["sources"], **an}
+                        st.rerun()
+            an = ss.get("sel_analysis")
+            if an:
+                st.markdown(f"Sources: transcript **{an['evidence_sources']['transcript']}** · "
+                            f"comments **{an['evidence_sources']['comments']}**")
+                from niche_studio.trending import ANALYSIS_KEYS
+                st.dataframe(pd.DataFrame([{"What": k.replace("_", " ").capitalize(),
+                                            "Finding": (an.get(k) or {}).get("text", "") if isinstance(an.get(k), dict) else str(an.get(k, "")),
+                                            "Basis": "✔ verified" if isinstance(an.get(k), dict) and an[k].get("basis") == "verified" else "≈ inferred"}
+                                           for k in ANALYSIS_KEYS]), hide_index=True, width="stretch", height=420)
+                st.markdown(f"**Hook:** {an.get('hook_structure', '')} (≈ {an.get('hook_score', '?')}/10)  \n"
+                            f"**Viewers talk about:** {', '.join(an.get('viewer_themes', [])[:5])}  \n"
+                            f"**Viewers ask for:** {', '.join(an.get('viewer_requests', [])[:5])}")
+        base = f"An original video inspired by \"{v['title']}\" ({v['platform']})."
+        context = {"source_video": {k: v.get(k) for k in ("title", "platform", "views", "views_per_hour", "engagement_rate",
+                                                           "status", "duration_s", "is_short")},
+                   "analysis": ss.get("sel_analysis")}
+        default_aspect = "9:16" if v.get("is_short") else "16:9"
+        twist = st.text_input("Your twist (optional)", placeholder="e.g. same idea but with a robot instead of a cat")
+        if twist:
+            base += f" Creator's twist: {twist}"
+    else:
+        st.subheader("1 · Your idea")
+        with st.container(border=True):
+            st.text_area("Describe the video", key="cr_idea", height=90,
+                         placeholder="e.g. A cinematic video of what happens when a huge asteroid approaches Earth")
+            with st.expander("Need an idea? ✨"):
+                t1, t2 = st.columns([2, 1])
+                topic = t1.text_input("Topic", placeholder="e.g. cats, space, cooking")
+                vibe = t2.selectbox("Vibe", VIBES)
+                if st.button("Suggest 4 ideas", disabled=not topic):
+                    out = run("Thinking", chat_json, c, "You invent original short video ideas. JSON only.",
+                              f"Topic: {topic}. Vibe: {vibe}. 4 clearly different ideas, each one visual sentence.\n"
+                              'Return {"ideas": ["...", "...", "...", "..."]}', 0.9)
+                    ss["cr_sugg"] = (out or {}).get("ideas", []) if isinstance(out, dict) else []
+                for i, idea in enumerate(ss.get("cr_sugg", [])):
+                    if st.button(f"➜ {idea}", key=f"sg{i}"):
+                        ss["cr_idea_next"] = idea
+                        st.rerun()
+            r1, r2 = st.columns([2, 1])
+            research = r1.segmented_control("Trend research", ["Skip", "YouTube", "Facebook", "Both"], default="Skip") or "Skip"
+            days = r2.selectbox("Look at the last", [7, 30, 90], index=1, format_func=lambda d: f"{d} days",
+                                disabled=research == "Skip")
+            if research != "Skip":
+                if st.button("🔍  Research this idea", disabled=not ss.get("cr_idea", "").strip()):
+                    plats = ["YouTube", "Facebook"] if research == "Both" else [research]
+                    out = run("Researching (searches YouTube, reads comments, analyses)", research_idea, c,
+                              ss["cr_idea"], plats, "any", days)
+                    if out:
+                        ss["cr_research"] = out
+                        st.rerun()
+        idea = ss.get("cr_idea", "").strip()
+        rs = ss.get("cr_research") if research != "Skip" else None
+        if rs and rs.get("idea") != idea:
+            rs = None
+        if rs:
+            _show_research(rs)
+            imp = rs.get("brief", {}).get("improved_idea", {})
+            use_imp = bool(imp.get("idea")) and st.toggle("Use the improved idea", value=True)
+            base = (imp.get("idea") if use_imp else idea) or idea
+            context = {"trend_research": rs.get("brief"), "top_videos": [
+                {k: v.get(k) for k in ("title", "views", "views_per_hour", "duration_s", "status")} for v in rs["videos"][:8]],
+                "search_phrases": rs["interest"].get("youtube_suggestions", [])[:8]}
+            if rs.get("median_length_s") and rs["median_length_s"] <= 90:
+                default_aspect = "9:16"
+        else:
+            base = idea
+
+    # ---- settings + generate
+    st.subheader("2 · Generate the prompt")
+    with st.container(border=True):
+        style = st.pills("Style", list(STYLES), default="Auto") or "Auto"
+        s1, s2, s3 = st.columns(3)
+        aspect = s1.segmented_control("Size", ["9:16", "16:9"], default=default_aspect, key=f"asp{default_aspect}") or default_aspect
+        length = s2.segmented_control("Length", ["8s", "15s", "30s", "60s", "90s"], default="30s") or "30s"
+        voice = s3.segmented_control("Voice", VOICES, default="Auto") or "Auto"
+        g1, g2 = st.columns(2)
+        langs = sorted({m["language"] for m in markets(c).values()} | {"English"})
+        lang = g1.selectbox("Language", langs, index=langs.index("English"))
+        extra = g2.text_input("Anything else? (optional)", placeholder="e.g. no people, end with a loop")
+        if not base:
+            st.caption("Describe your idea above first.")
+        if st.button("✨  Generate complete prompt", type="primary", width="stretch", disabled=not base):
+            plan = run("Writing the full video plan (1–2 minutes)", write_plan, c, base, style, aspect,
+                       int(length[:-1]), lang, voice, extra, context)
+            if plan:
+                plan["_id"] = int(datetime.now().strftime("%d%H%M%S"))
+                plan["_source"] = {"type": src, "idea": base,
+                                   "video": (ss.get("sel_video") or {}).get("url") if src == "A trending video" else None}
+                save(_plans_dir(c) / f"{plan['_id']}.json", plan)
+                ss["cr_plan"] = str(plan["_id"])
+                st.rerun()
+
+    plans = sorted(_plans_dir(c).glob("*.json"), key=lambda p: -p.stat().st_mtime)
+    if plans:
+        st.subheader("3 · Your prompt")
+        names = {p.stem: (load(p) or {}).get("title", p.stem) for p in plans}
+        cur = str(ss.get("cr_plan", plans[0].stem))
+        cur = cur if cur in names else plans[0].stem
+        pid = st.selectbox("Plan", list(names), index=list(names).index(cur), format_func=lambda k: names[k])
+        ss["cr_plan"] = pid
+        _show_plan(c, _plans_dir(c) / f"{pid}.json")
+
+
+def _show_research(rs: dict):
+    b = rs.get("brief", {})
+    with st.container(border=True):
+        st.markdown(f"**Trend research** · searched {', '.join(rs['queries'])} · last {rs['days']} days · "
+                    f"{len(rs['videos'])} videos · {rs.get('quota_units', 0)} quota units")
+        a = b.get("answers", {})
+        labels = {"is_topic_popular": "Is it popular?", "are_people_searching": "Are people searching?",
+                  "similar_videos_views": "How do similar videos do?", "best_related_concepts": "Best related concepts",
+                  "successful_hooks": "Hooks that work", "visual_styles": "Visual styles", "common_lengths": "Common lengths",
+                  "storytelling": "Storytelling", "what_viewers_respond_to": "What viewers respond to",
+                  "opportunities": "Opportunities"}
+        st.dataframe(pd.DataFrame([{"Question": q, "Answer (≈ AI reading of the data below)": a.get(k, "")}
+                                   for k, q in labels.items()]), hide_index=True, width="stretch")
+        st.markdown("**Top videos found** (✔ verified numbers)")
+        st.dataframe(pd.DataFrame([{"Title": v["title"][:60], "Platform": v["platform"], "Views": v.get("views"),
+                                    "Views/h": v.get("views_per_hour"), "Engagement %": v.get("engagement_rate"),
+                                    "Age (days)": round(v["age_hours"] / 24, 1), "Status": v.get("status"),
+                                    "Link": v.get("url")} for v in rs["videos"]]),
+                     hide_index=True, width="stretch", column_config={"Link": st.column_config.LinkColumn()})
+        it = rs.get("interest", {})
+        st.markdown("**What people type into YouTube** (✔ live autocomplete; volumes: Data unavailable)  \n"
+                    + " · ".join(it.get("youtube_suggestions", [])[:10]))
+        if it.get("questions"):
+            st.markdown("**Questions people ask:** " + " · ".join(it["questions"][:8]))
+        imp = b.get("improved_idea", {})
+        if imp.get("idea"):
+            st.markdown(f"**Improved idea:** {imp['idea']}  \n**Opening:** {imp.get('stronger_opening', '')}  \n"
+                        f"**Angle:** {imp.get('angle', '')}  \n**Ending:** {imp.get('ending', '')}")
+
+
+def _plan_to_idea(plan: dict, prompts: list[str]) -> dict:
+    """Shape a plan for the existing renderer (voice, captions, music)."""
+    yt = plan.get("youtube", {})
+    scenes = [{"n": s["n"], "seconds": float(s.get("seconds") or 5), "hero": True, "visual_prompt": p,
+               "voiceover": s.get("lyrics") or s.get("narration") or "", "on_screen_text": s.get("on_screen_text") or "",
+               "sfx": s.get("sound_effects", "")} for s, p in zip(plan.get("scenes", []), prompts)]
+    return {"id": plan["_id"], "title": plan.get("title", "video"),
+            "format": "short" if plan.get("_aspect", "9:16") == "9:16" else "long", "scenes": scenes,
+            "thumbnail_text": plan.get("thumbnail", {}).get("text", ""), "youtube_description": yt.get("description", ""),
+            "hashtags": yt.get("hashtags", []), "facebook_caption": plan.get("facebook_caption", "")}
+
+
+def _show_plan(c, path: Path):
+    from niche_studio.produce import produce, project_dir
+    from niche_studio.prompts import clip_prompts, complete_prompt
+    plan = load(path)
+    if not plan or not plan.get("scenes"):
+        return
+    prompts = clip_prompts(plan)
+    full = complete_prompt(plan)
+    idea = _plan_to_idea(plan, prompts)
+    proj = project_dir(_plans_dir(c), idea)
+    total = sum(float(s.get("seconds") or 0) for s in plan["scenes"])
+    one_clip = len(plan["scenes"]) == 1
+
+    st.markdown(f"<div class='hero' style='padding:1.3rem 1.6rem'><h1 style='font-size:1.6rem'>{plan.get('title', '')}</h1>"
+                f"<p>{plan.get('hook', '')}</p></div>", unsafe_allow_html=True)
+    m1, m2, m3, m4 = st.columns(4)
+    m1.metric("Length", f"{total:.0f}s")
+    m2.metric("Clips", len(plan["scenes"]))
+    m3.metric("Size", plan.get("_aspect", ""))
+    m4.metric("Style", (plan.get("_style") if plan.get("_style") != "Auto" else plan.get("style", ""))[:18] or "–")
+
+    t_full, t_clips, t_assets, t_sound, t_post = st.tabs(
+        ["📋 Complete prompt", f"🎬 Clip prompts ({len(prompts)})", "🧰 Assets", "🎵 Audio", "📤 Title & post"])
+    with t_full:
+        if one_clip:
+            st.success("This video is one clip (8 s or less): paste this prompt straight into Gemini or Flow.")
+        else:
+            st.info(f"Google Veo makes up to 8 seconds per generation, so this {total:.0f}s video is {len(prompts)} clips. "
+                    "This complete prompt is the whole creative brief; to generate, use the **Clip prompts** tab, one per clip.")
+        copy_button(full, "Copy Complete Video Prompt", key=f"full{path.stem}")
+        st.code(full, language=None, wrap_lines=True)
+        st.download_button("Download as text", full, file_name=f"{proj.name}.txt")
+    with t_clips:
+        st.markdown(f"In **[Google Flow]({FLOW_URL})** (or the **[Gemini app]({GEMINI_URL})** → Video): set "
+                    f"**{plan.get('_aspect')}**, paste a clip prompt, generate, download, and drop the file in that clip's box.")
+        for s, p in zip(plan["scenes"], prompts):
+            n = s["n"]
+            have = any((proj / "flow_inbox").glob(f"shot_{n:02d}.*"))
+            with st.container(border=True):
+                st.markdown(f"**{'✅' if have else '⬜'} Clip {n}** · {s['seconds']:g}s · {s.get('purpose', '')}")
+                copy_button(p, f"Copy clip {n} prompt", key=f"cp{path.stem}{n}")
+                st.code(p, language=None, wrap_lines=True)
+                up = st.file_uploader("Drop the downloaded clip here", type=["mp4", "mov", "webm"], key=f"up{path.stem}{n}")
+                if up:
+                    for old in (proj / "flow_inbox").glob(f"shot_{n:02d}.*"):
+                        old.unlink()
+                    (proj / "flow_inbox" / f"shot_{n:02d}{Path(up.name).suffix.lower()}").write_bytes(up.getvalue())
+    with t_assets:
+        for ch in plan.get("characters", []):
+            st.markdown(f"- 🧑 **{ch.get('name', '')}**: {ch.get('look', '')}")
+        for pl in plan.get("settings", []):
+            st.markdown(f"- 📍 **{pl.get('name', '')}**: {pl.get('look', '')}")
+        for pr in plan.get("props", []):
+            st.markdown(f"- 🧸 **{pr.get('name', '')}**: {pr.get('look', '')}")
+        st.markdown("**Checklist**")
+        for i, a in enumerate(plan.get("assets", [])):
+            st.checkbox(f"{a.get('type', '').upper()} · {a.get('what', '')}: {a.get('how', '')}", key=f"as{path.stem}{i}")
+    with t_sound:
+        v, m = plan.get("voice", {}), plan.get("music", {})
+        st.markdown(f"**Voice:** {v.get('use', '')} · {v.get('character') or v.get('style', '')} · "
+                    f"{v.get('delivery', '')} · {v.get('quality', '')}  \n"
+                    f"**Music:** {m.get('mood', '')} · {m.get('genre', '')} · {m.get('tempo_bpm', '')} bpm")
+        if m.get("search_terms"):
+            st.markdown(f"YouTube Audio Library search: `{m['search_terms']}` (put the track in the `music` folder to mix it in)")
+        if plan.get("song"):
+            sg = plan["song"]
+            st.markdown(f"**Song:** {sg.get('title', '')} · {sg.get('bpm', '')} bpm · {sg.get('key', '')} · "
+                        f"{sg.get('instruments', '')}  \n**Singer:** {sg.get('vocal', '')}")
+            st.code(str(sg.get("lyrics", "")), language=None, wrap_lines=True)
+        script = "\n".join(f"[{s['n']}] " + (s.get("lyrics") or s.get("dialogue") or s.get("narration") or "(no speech)")
+                           for s in plan["scenes"])
+        st.code(script, language=None, wrap_lines=True)
+    with t_post:
+        yt, th = plan.get("youtube", {}), plan.get("thumbnail", {})
+        st.code(yt.get("title") or plan.get("title", ""), language=None, wrap_lines=True)
+        if plan.get("alt_titles"):
+            st.caption("Other titles: " + " · ".join(plan["alt_titles"]))
+        desc = yt.get("description", "")
+        tags = [t for t in yt.get("hashtags", []) if t.lower() not in desc.lower()]
+        st.code((desc + "\n\n" + " ".join(tags)).strip(), language=None, wrap_lines=True)
+        st.markdown("**Facebook caption**")
+        st.code(plan.get("facebook_caption", ""), language=None, wrap_lines=True)
+        st.markdown(f"**Thumbnail** · text `{th.get('text', '')}`")
+        st.code(th.get("prompt", ""), language=None, wrap_lines=True)
+
+    added = sum(any((proj / "flow_inbox").glob(f"shot_{s['n']:02d}.*")) for s in plan["scenes"])
+    with st.expander(f"Build the finished video from your clips ({added}/{len(prompts)} added)"):
+        st.caption("Joins your downloaded clips in order. Missing clips become placeholder cards.")
+        tts = st.checkbox("Add an AI voiceover too (leave off if Veo already speaks in the clips)", value=False, key=f"tts{path.stem}")
+        if st.button("🎬  Build video", key=f"b{path.stem}"):
+            cc = {**c, "tts": {**c.get("tts", {}), "engine": c.get("tts", {}).get("engine", "edge") if tts else "none"}}
+            final = run("Building the video", produce, cc, _plans_dir(c), idea, print, False)
+            if final and Path(final).exists():
+                dest = _gallery_dir(c) / f"{proj.name}.mp4"
+                shutil.copyfile(final, dest)
+                save(dest.with_suffix(".json"), {"title": plan.get("title", ""), "aspect": plan.get("_aspect")})
+                st.success("Done")
+        vids = sorted(_gallery_dir(c).glob("*.mp4"), key=lambda p: -p.stat().st_mtime)
+        for p in vids[:3]:
+            st.video(str(p))
+            st.download_button("Download " + p.name, p.read_bytes(), file_name=p.name, key=f"dl{path.stem}{p.name}")
 
 
 def page_find():
@@ -185,23 +751,26 @@ def page_find():
     from niche_studio.collect import scan_label, scan_niche
     from niche_studio.money import markets
     from niche_studio.planner import project
-    st.title("🔎 Find a niche")
+    st.title("Pick a topic")
+    st.caption("Type a topic. We check which country pays most for it.")
     c = cfg()
     if not c:
         st.warning("Save Settings first.")
         return
-    mode = st.segmented_control("Mode", ["One niche, many countries", "Many niches, one country", "Single scan"],
-                                default="One niche, many countries")
     mk = markets(c)
-    with st.container(border=True):
-        col1, col2, col3 = st.columns([3, 1, 1])
-        shorts = col2.number_input("Shorts / week", 0, 30, 7)
-        longs = col3.number_input("Long videos / week", 0, 7, 1)
+    with st.expander("More options"):
+        mode = st.segmented_control("Mode", ["One niche, many countries", "Many niches, one country", "Single scan"],
+                                    default="One niche, many countries") or "One niche, many countries"
+        o1, o2 = st.columns(2)
+        shorts = o1.number_input("Shorts you'll post per week", 0, 30, 7)
+        longs = o2.number_input("Long videos you'll post per week", 0, 7, 1)
         days = st.slider("Look back (days)", 14, 180, c.get("youtube", {}).get("lookback_days", 90))
         refresh = st.checkbox("Rescan even if scanned recently (uses API quota)")
+    with st.container(border=True):
+        col1 = st.container()
 
         if mode == "One niche, many countries":
-            niche = col1.text_input("Niche", placeholder="e.g. funny robot sketches")
+            niche = col1.text_input("Your topic", placeholder="e.g. funny cat videos")
             chosen = st.multiselect("Countries", list(mk), default=c.get("money", {}).get("default_markets", ["us", "uk", "de", "jp", "bd"]),
                                     format_func=lambda k: f"{k} · {mk[k]['language']}")
             local = [k for k in chosen if mk[k]["lang"] != "en"]
@@ -209,10 +778,10 @@ def page_find():
                                value=c.get("llm", {}).get("provider") != "none", disabled=c.get("llm", {}).get("provider") == "none")
             queries = {}
             if local:
-                st.caption("Search phrase per country, typed the way locals search (leave blank to auto-translate or use English):")
-                qcols = st.columns(4)
+                qx = st.expander("Search phrase per country (optional, leave blank to auto-translate)")
+                qcols = qx.columns(4)
                 queries = {k: qcols[i % 4].text_input(f"{k} · {mk[k]['language']}", key=f"q_{k}") for i, k in enumerate(local)}
-            go = st.button("Scan and rank countries", type="primary", disabled=not niche)
+            go = st.button("Check this topic  →", type="primary", disabled=not niche)
             if go and auto and local and niche:
                 from niche_studio.llm import chat_json
                 missing = {k: mk[k]["language"] for k in local if not queries.get(k)}
@@ -745,12 +1314,24 @@ def page_settings():
         st.success("Saved")
 
 
-pages = [st.Page(page_home, title="Home", icon="🏠", default=True),
-         st.Page(page_find, title="Find a niche", icon="🔎", url_path="find"),
-         st.Page(page_report, title="Niche report", icon="📊", url_path="report"),
-         st.Page(page_plan, title="Money plan", icon="📈", url_path="plan"),
-         st.Page(page_ideas, title="Ideas", icon="💡", url_path="ideas"),
-         st.Page(page_studio, title="Studio", icon="🎞️", url_path="studio"),
-         st.Page(page_facebook, title="Facebook", icon="📘", url_path="facebook"),
-         st.Page(page_settings, title="Settings", icon="⚙️", url_path="settings")]
-st.navigation(pages).run()
+def page_setup():
+    st.title("Setup status")
+    c = cfg()
+    if c:
+        _home_checks(c)
+
+
+PAGE_HOME = st.Page(page_home, title="Home", icon=":material/home:", url_path="home", default=True)
+PAGE_DISCOVER = st.Page(page_discover, title="Discover trending", icon=":material/local_fire_department:", url_path="discover")
+PAGE_CREATE = st.Page(page_create, title="Create", icon=":material/auto_awesome:", url_path="create")
+main = [PAGE_HOME, PAGE_DISCOVER, PAGE_CREATE,
+        st.Page(page_settings, title="Settings", icon=":material/settings:", url_path="settings")]
+more = [st.Page(page_find, title="Niche money check", icon=":material/search:", url_path="find"),
+        st.Page(page_report, title="Niche report", icon=":material/insights:", url_path="report"),
+        st.Page(page_plan, title="Money plan", icon=":material/payments:", url_path="plan"),
+        st.Page(page_ideas, title="Ideas (advanced)", icon=":material/lightbulb:", url_path="ideas"),
+        st.Page(page_studio, title="Studio (advanced)", icon=":material/movie:", url_path="studio"),
+        st.Page(page_facebook, title="Facebook Page stats", icon=":material/groups:", url_path="facebook"),
+        st.Page(page_setup, title="Setup status", icon=":material/checklist:", url_path="setup")]
+pages = main + more
+st.navigation({"": main, "More tools": more}).run()
