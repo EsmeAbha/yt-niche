@@ -16,6 +16,7 @@ from niche_studio.comfy import Comfy
 
 ROOT = Path(__file__).parent
 WORKFLOW = ROOT / "workflows" / "ltx25_t2v_api.json"
+WORKFLOW_I2V = ROOT / "workflows" / "ltx25_i2v_api.json"
 FPS = 24
 
 
@@ -26,23 +27,27 @@ def main():
     ap.add_argument("--seconds", type=float, default=5)
     ap.add_argument("--count", type=int, default=1, help="how many versions to make (different seeds)")
     ap.add_argument("--seed", type=int)
+    ap.add_argument("--image", type=Path, help="start frame (your character/scene picture)")
+    ap.add_argument("--out", type=Path, help="exact output file (default: output/clips/<time>_<prompt>.mp4)")
     ap.add_argument("--url", default="http://127.0.0.1:8188")
     a = ap.parse_args()
 
     # Stage 1 renders at half size; the x2 upscaler brings it to 704x1280 (or 1280x704).
     w, h = (640, 352) if a.wide else (352, 640)
     frames = 1 + int(a.seconds * FPS) // 8 * 8
-    comfy = Comfy(a.url, WORKFLOW)
+    comfy = Comfy(a.url, WORKFLOW_I2V if a.image else WORKFLOW)
     if not comfy.available():
         raise SystemExit("ComfyUI is not running. Start G:\\sajin\\vidGen\\ComfyUI_windows_portable\\run_nvidia_gpu.bat")
 
     slug = re.sub(r"[^a-z0-9]+", "-", a.prompt.lower())[:40].strip("-")
     for i in range(a.count):
         seed = a.seed + i if a.seed is not None else None
-        out = ROOT / "output" / "clips" / f"{time.strftime('%Y%m%d-%H%M%S')}_{slug}.mp4"
+        out = a.out or ROOT / "output" / "clips" / f"{time.strftime('%Y%m%d-%H%M%S')}_{slug}.mp4"
+        if a.out and a.count > 1:
+            out = out.with_stem(f"{out.stem}_{i + 1}")
         t = time.time()
         print(f"[{i + 1}/{a.count}] rendering {w * 2}x{h * 2}, {a.seconds:g}s ...", flush=True)
-        path = comfy.render(a.prompt, out, w, h, frames, negative="", seed=seed)
+        path = comfy.render(a.prompt, out, w, h, frames, negative="", seed=seed, image=a.image)
         print(f"  done in {time.time() - t:.0f}s -> {path}")
 
 
