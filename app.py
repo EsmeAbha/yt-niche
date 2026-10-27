@@ -643,6 +643,23 @@ def _plan_to_idea(plan: dict, prompts: list[str]) -> dict:
             "hashtags": yt.get("hashtags", []), "facebook_caption": plan.get("facebook_caption", "")}
 
 
+def _split_tags(text: str) -> tuple[str, list[str]]:
+    """'Fun video! #a #b' -> ('Fun video!', ['#a', '#b']), so hashtags can be gathered in one place."""
+    import re
+    tags = re.findall(r"#\w+", text or "")
+    return re.sub(r"\s*#\w+", "", text or "").strip(), tags
+
+
+def _uniq_tags(tags: list[str]) -> list[str]:
+    seen, out = set(), []
+    for t in tags:
+        t = "#" + str(t).lstrip("#").strip()
+        if len(t) > 1 and t.lower() not in seen:
+            seen.add(t.lower())
+            out.append(t)
+    return out
+
+
 def _show_plan(c, path: Path):
     from niche_studio.produce import produce, project_dir
     from niche_studio.prompts import clip_prompts, complete_prompt
@@ -717,16 +734,23 @@ def _show_plan(c, path: Path):
         st.code(script, language=None, wrap_lines=True)
     with t_post:
         yt, th = plan.get("youtube", {}), plan.get("thumbnail", {})
-        st.code(yt.get("title") or plan.get("title", ""), language=None, wrap_lines=True)
+        title, yt_tags = _split_tags(yt.get("title") or plan.get("title", ""))
+        desc, d_tags = _split_tags(yt.get("description", ""))
+        tags = _uniq_tags(yt_tags + d_tags + list(yt.get("hashtags", [])))
+        youtube = f"TITLE:\n{title}\n\nDESCRIPTION:\n{desc}\n\n{' '.join(tags)}".strip()
+        fb_text, fb_tags = _split_tags(plan.get("facebook_caption", ""))
+        facebook = f"{fb_text}\n\n{' '.join(_uniq_tags(fb_tags))}".strip()
+        thumb = f"THUMBNAIL TEXT: {th.get('text', '')}\n\nTHUMBNAIL IMAGE PROMPT:\n{th.get('prompt', '')}"
+        everything = f"=== YOUTUBE ===\n{youtube}\n\n=== FACEBOOK ===\n{facebook}\n\n=== {thumb}"
+        copy_button(everything, "Copy everything (YouTube + Facebook + thumbnail)", key=f"all{path.stem}")
+        for head, body, k in [("▶️ YouTube post", youtube, "yt"), ("📘 Facebook post", facebook, "fb"),
+                              ("🖼️ Thumbnail", thumb, "th")]:
+            with st.container(border=True):
+                st.markdown(f"**{head}**")
+                st.code(body, language=None, wrap_lines=True)
+                copy_button(body, f"Copy {head.split(' ', 1)[1]}", key=f"{k}{path.stem}")
         if plan.get("alt_titles"):
-            st.caption("Other titles: " + " · ".join(plan["alt_titles"]))
-        desc = yt.get("description", "")
-        tags = [t for t in yt.get("hashtags", []) if t.lower() not in desc.lower()]
-        st.code((desc + "\n\n" + " ".join(tags)).strip(), language=None, wrap_lines=True)
-        st.markdown("**Facebook caption**")
-        st.code(plan.get("facebook_caption", ""), language=None, wrap_lines=True)
-        st.markdown(f"**Thumbnail** · text `{th.get('text', '')}`")
-        st.code(th.get("prompt", ""), language=None, wrap_lines=True)
+            st.caption("Other title ideas: " + " · ".join(plan["alt_titles"]))
 
     added = sum(any((proj / "flow_inbox").glob(f"shot_{s['n']:02d}.*")) for s in plan["scenes"])
     with st.expander(f"Build the finished video from your clips ({added}/{len(prompts)} added)"):
